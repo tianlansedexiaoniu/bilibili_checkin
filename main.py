@@ -31,11 +31,11 @@ def execute_coin_task(bili, user_info, config):
     coins_to_add = int(config.get('COIN_ADD_NUM'))
     if coins_to_add <= 0:
         return True, "配置为0，跳过"
-    
+
     coin_balance = user_info.get('money', 0)
     if coin_balance < 1:
         return True, f"硬币不足({coin_balance})，跳过"
-    
+
     coins_to_add = min(coins_to_add, int(coin_balance), 5)
 
     if config.get('COIN_VIDEO_SOURCE') == 'ranking':
@@ -59,7 +59,7 @@ def execute_coin_task(bili, user_info, config):
     for bvid in video_list:
         if added_coins >= coins_to_add:
             break
-        
+
         success, msg = bili.add_coin(bvid, 1, int(config.get('COIN_SELECT_LIKE')))
         if success:
             added_coins += 1
@@ -78,16 +78,16 @@ def execute_coin_task(bili, user_info, config):
 def run_all_tasks_for_account(bili, config):
     tasks_to_run = [task.strip() for task in config.get('TASK_CONFIG', '').split(',') if task.strip()]
     if not tasks_to_run:
-        tasks_to_run = ['live_sign', 'manga_sign', 'share_video', 'add_coin']
+        tasks_to_run = ['live_sign', 'manga_sign', 'share_video', 'add_coin', 'silver_bag', 'silver2coin', 'cleanup_likes']
 
     user_info = bili.get_user_info()
     if not user_info:
         return {'登录检查': (False, 'Cookie失效或网络问题')}, None
-        
+
     masked_uname = mask_string(user_info.get('uname'))
     logger.info(f"账号名称: {masked_uname}")
     tasks_result = {}
-    
+
     video_list = bili.get_dynamic_videos() or bili.get_ranking_videos() or bili.get_popular_videos()
     bvid_for_task = video_list[0] if video_list else 'BV1GJ411x7h7'
 
@@ -95,38 +95,46 @@ def run_all_tasks_for_account(bili, config):
         tasks_result['分享视频'] = bili.share_video(bvid_for_task)
     if 'live_sign' in tasks_to_run:
         tasks_result['直播签到'] = bili.live_sign()
+    if 'silver_bag' in tasks_to_run:
+        tasks_result['银瓜子礼包'] = bili.get_daily_bag()
     if 'silver2coin' in tasks_to_run:
         tasks_result['银瓜子兑换硬币'] = bili.silver2coin()
     if 'manga_sign' in tasks_to_run:
         tasks_result['漫画签到'] = bili.manga_sign()
     if 'add_coin' in tasks_to_run:
         tasks_result['投币任务'] = execute_coin_task(bili, user_info, config)
+    # 清理点赞列表：取消本次运行因投币(select_like)产生的点赞痕迹。
+    # 注意：投币本身不可逆，无法撤销「最近投币」记录。
+    if 'cleanup_likes' in tasks_to_run:
+        tasks_result['清理点赞列表'] = bili.cleanup_liked_videos()
 
     tasks_result['观看视频'] = bili.watch_video(bvid_for_task)
 
     return tasks_result, user_info
 
 def main():
-    # ==================== 【核心修改点在这里】 ====================
-    # 我们先用 .get() 获取值，如果值是空字符串，就用 or 操作符来选择默认值。
-    # 这样既能处理"变量不存在"的情况，也能处理"变量存在但为空"的情况。
+    # ==================== 【核心配置点】 ====================
+    # 每日登录奖励 +1 硬币由 B站服务端自动发放（无需领取接口）。
+    # 令 COIN_ADD_NUM=1，使「每日投币消耗(1) ≈ 登录领取(1)」，保持硬币净平衡；
+    # 若日后银瓜子可兑换，将额外获得硬币（净正增长）。
     config = {
         "BILIBILI_COOKIE": os.environ.get('BILIBILI_COOKIE'),
         "PUSH_PLUS_TOKEN": os.environ.get('PUSH_PLUS_TOKEN'),
-        "TASK_CONFIG": os.environ.get('TASK_CONFIG') or 'live_sign,manga_sign,share_video,add_coin,silver2coin',
+        "TASK_CONFIG": os.environ.get('TASK_CONFIG') or 'live_sign,manga_sign,share_video,add_coin,silver_bag,silver2coin,cleanup_likes',
         "COIN_ADD_NUM": os.environ.get('COIN_ADD_NUM') or '1',
         "COIN_SELECT_LIKE": os.environ.get('COIN_SELECT_LIKE') or '1',
         "COIN_VIDEO_SOURCE": os.environ.get('COIN_VIDEO_SOURCE') or 'dynamic'
     }
-    # ============================================================
-    
+    # =========================================================
+
     if not config["BILIBILI_COOKIE"]:
         logger.error('环境变量 BILIBILI_COOKIE 未设置，程序终止')
         sys.exit(1)
 
     cookies = [c.strip() for c in config["BILIBILI_COOKIE"].split('###') if c.strip()]
     logger.info(f"检测到 {len(cookies)} 个账号，开始执行任务...")
-    
+    logger.info(f"任务清单: {config['TASK_CONFIG']} | 每日投币: {config['COIN_ADD_NUM']} 枚")
+
     all_results = []
     any_failed = False  # 全局失败标志
     for i, cookie in enumerate(cookies, 1):
@@ -195,7 +203,7 @@ def main():
         logger.info("所有账号任务全部成功！")
         sys.exit(0)
 
-IGNORE_FAIL_KEYWORDS = ["未配置", "跳过", "已下线", "不足", "已用尽", "未找到"]
+IGNORE_FAIL_KEYWORDS = ["未配置", "跳过", "已下线", "不足", "已用尽", "未找到", "无需取消"]
 
 if __name__ == '__main__':
     main()
