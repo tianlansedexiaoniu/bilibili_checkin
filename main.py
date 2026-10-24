@@ -43,8 +43,15 @@ def execute_coin_task(bili, user_info, config):
         logger.info("获取排行榜视频作为投币目标。")
     else:
         video_list = bili.get_dynamic_videos()
-        logger.info("获取动态视频作为投币目标。")
+        logger.info("获取热门/动态视频作为投币目标。")
 
+    # 兜底：首选来源为空时，依次回退到排行榜、热门，避免「无法获取视频列表」
+    if not video_list:
+        logger.warning("首选视频源为空，回退到排行榜。")
+        video_list = bili.get_ranking_videos()
+    if not video_list:
+        logger.warning("排行榜为空，回退到热门。")
+        video_list = bili.get_popular_videos()
     if not video_list:
         return False, "无法获取视频列表"
 
@@ -81,7 +88,7 @@ def run_all_tasks_for_account(bili, config):
     logger.info(f"账号名称: {masked_uname}")
     tasks_result = {}
     
-    video_list = bili.get_dynamic_videos()
+    video_list = bili.get_dynamic_videos() or bili.get_ranking_videos() or bili.get_popular_videos()
     bvid_for_task = video_list[0] if video_list else 'BV1GJ411x7h7'
 
     if 'share_video' in tasks_to_run:
