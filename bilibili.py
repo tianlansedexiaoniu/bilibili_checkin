@@ -11,6 +11,7 @@ class BilibiliTask:
             'Cookie': cookie
         }
         self.csrf = self._get_csrf()
+        self.liked_bvids = []   # 本次运行中点过赞(bvid)的视频，供「清理点赞列表」使用
 
     def _get_csrf(self):
         for item in self.cookie.split(';'):
@@ -32,8 +33,6 @@ class BilibiliTask:
             logger.error(f"请求用户信息API异常: {e}")
             return None
 
-
-    
     def get_dynamic_videos(self):
         # 原 x/web-interface/dynamic/region 接口已被B站下线（返回 code=-404「啥都木有」），
         # 这里改为从「热门」视频中取投币目标，保证总能拿到可用视频。
@@ -86,11 +85,14 @@ class BilibiliTask:
             res = requests.post(url, headers=self.headers, data=data)
             data = res.json()
             if data['code'] == 0:
+                # 投币时若附加点赞，记录该视频，供后续「清理点赞列表」取消赞
+                if select_like:
+                    self.liked_bvids.append(bvid)
                 return True, "投币成功"
             return False, data.get('message', '投币失败')
         except Exception as e:
             return False, str(e)
-            
+
     def share_video(self, bvid):
         if not self.csrf: return False, "Bili_jct(csrf) 未找到"
         url = 'https://api.bilibili.com/x/web-interface/share/add'
@@ -115,7 +117,7 @@ class BilibiliTask:
             return False, data.get('message', '观看失败')
         except Exception as e:
             return False, str(e)
-            
+
     def live_sign(self):
         url = 'https://api.live.bilibili.com/xlive/web-ucenter/v1/sign/DoSign'
         try:
@@ -138,11 +140,28 @@ class BilibiliTask:
         except Exception as e:
             return False, str(e)
 
-    # ===================== 以下为「银瓜子兑换硬币」相关 =====================
-    # 说明：B站已于 2026 年下线「直播签到」与「网页端心跳」产银瓜子能力，
-    # 复杂双端看直播心跳（移动端需 Sypder 加密）也不可靠。这里仅保留
-    # 「银瓜子 → 硬币」兑换：当账户银瓜子 ≥700 时自动兑换 1 枚硬币；
-    # 银瓜子不足则安全跳过。若日后 B站恢复银瓜子来源，兑换会自动生效。
+    # ===================== 「银瓜子」相关 =====================
+    # 说明：B站自 2026 年起大幅废弃银瓜子来源。实测：
+    #   - 直播签到(DoSign) 已下线
+    #   - 每日礼包(receive_daily_bag) 返回空 bag_list（不再发放银瓜子）
+    #   - 移动端宝箱(freeSilver*) 需 sign 签名且多数 404
+    # 因此下面保留「领取礼包 + 兑换硬币」的标准实现，B站恢复发放时会自动生效；
+    # 当前若无可领银瓜子，则安全跳过，不影响其它任务。
+
+    def get_daily_bag(self):
+        """领取每日银瓜子礼包（最简单来源）。礼包为空时安全跳过。"""
+        try:
+            r = requests.get(
+                'https://api.live.bilibili.com/gift/v2/live/receive_daily_bag',
+                headers=self.headers, timeout=15).json()
+            if r.get('code') == 0:
+                bag = r.get('data', {})
+                if bag.get('bag_list'):
+                    return True, f"领取每日礼包成功：{bag.get('bag_list')}"
+                return True, "每日礼包为空（B站当前未发放银瓜子，已安全跳过）"
+            return False, r.get('message', '领取每日礼包失败')
+        except Exception as e:
+            return False, str(e)
 
     def get_silver_status(self):
         """查询银瓜子/硬币钱包状态。"""
@@ -176,3 +195,39 @@ class BilibiliTask:
             return False, r.get('message', '兑换失败')
         except Exception as e:
             return False, str(e)
+
+    # ===================== 「清理最近点赞列表」 =====================
+    # 本次运行中对视频投币(select_like=1)会同时点赞，这些点赞会被记入「最近点赞」。
+    # 这里统一取消这些点赞，清理痕迹。投币本身不可逆，无法撤销。
+
+    def unlike_video(self, bvid):
+        if not self.csrf: return False, "Bili_jct(csrf) 未找到"
+        try:
+            r = requests.post(
+                'https://api.bilibili.com/x/web-interface/archive/like',
+                data={'bvid': bvid, 'like': 2, 'csrf': self.csrf},
+                headers=self.headers, timeout=15).json()
+            if r.get('code') == 0:
+                return True, "取消点赞成功"
+            # 65004 取消点赞失败（本就没赞）/重复操作，视为已清理
+            if r.get('code') in (65004,):
+                return True, "无需取消(已无赞)"
+            return False, r.get('message', '取消点赞失败')
+        except Exception as e:
+            return False, str(e)
+
+    def cleanup_liked_videos(self):
+        if not self.liked_bvids:
+            return True, "本次未产生点赞记录，跳过"
+        ok, fail = 0, 0
+        for bvid in self.liked_bvids:
+            success, msg = self.unlike_video(bvid)
+            if success:
+                ok += 1
+                logger.info(f"已取消点赞 {bvid}。")
+            else:
+                fail += 1
+                logger.warning(f"取消点赞 {bvid} 失败: {msg}")
+        if fail == 0:
+            return True, f"已清理 {ok} 条点赞记录"
+        return False, f"清理部分失败：成功{ok}/失败{fail}"
