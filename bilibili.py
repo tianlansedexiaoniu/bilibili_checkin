@@ -35,16 +35,22 @@ class BilibiliTask:
 
     
     def get_dynamic_videos(self):
-        url = 'https://api.bilibili.com/x/web-interface/dynamic/region?ps=5&rid=1'
+        # 原 x/web-interface/dynamic/region 接口已被B站下线（返回 code=-404「啥都木有」），
+        # 这里改为从「热门」视频中取投币目标，保证总能拿到可用视频。
+        return self.get_popular_videos()
+
+    def get_popular_videos(self):
+        url = 'https://api.bilibili.com/x/web-interface/popular?ps=10&pn=1'
         try:
             res = requests.get(url, headers=self.headers)
             res.raise_for_status()
             data = res.json()
-            if data['code'] == 0:
-                return [video['bvid'] for video in data.get('data', {}).get('archives', [])]
+            if data.get('code') == 0:
+                return [v['bvid'] for v in data.get('data', {}).get('list', []) if v.get('bvid')]
+            logger.warning(f"热门视频接口返回: {data.get('message')}")
             return []
         except Exception as e:
-            logger.error(f"请求动态视频API异常: {e}")
+            logger.error(f"请求热门视频API异常: {e}")
             return []
 
     def get_ranking_videos(self):
