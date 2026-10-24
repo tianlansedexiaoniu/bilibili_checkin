@@ -95,6 +95,8 @@ def run_all_tasks_for_account(bili, config):
         tasks_result['分享视频'] = bili.share_video(bvid_for_task)
     if 'live_sign' in tasks_to_run:
         tasks_result['直播签到'] = bili.live_sign()
+    if 'silver2coin' in tasks_to_run:
+        tasks_result['银瓜子兑换硬币'] = bili.silver2coin()
     if 'manga_sign' in tasks_to_run:
         tasks_result['漫画签到'] = bili.manga_sign()
     if 'add_coin' in tasks_to_run:
@@ -111,7 +113,7 @@ def main():
     config = {
         "BILIBILI_COOKIE": os.environ.get('BILIBILI_COOKIE'),
         "PUSH_PLUS_TOKEN": os.environ.get('PUSH_PLUS_TOKEN'),
-        "TASK_CONFIG": os.environ.get('TASK_CONFIG') or 'live_sign,manga_sign,share_video,add_coin',
+        "TASK_CONFIG": os.environ.get('TASK_CONFIG') or 'live_sign,manga_sign,share_video,add_coin,silver2coin',
         "COIN_ADD_NUM": os.environ.get('COIN_ADD_NUM') or '1',
         "COIN_SELECT_LIKE": os.environ.get('COIN_SELECT_LIKE') or '1',
         "COIN_VIDEO_SOURCE": os.environ.get('COIN_VIDEO_SOURCE') or 'dynamic'
@@ -193,7 +195,7 @@ def main():
         logger.info("所有账号任务全部成功！")
         sys.exit(0)
 
-IGNORE_FAIL_KEYWORDS = ["未配置", "跳过", "已下线"]
+IGNORE_FAIL_KEYWORDS = ["未配置", "跳过", "已下线", "不足", "已用尽", "未找到"]
 
 if __name__ == '__main__':
     main()
