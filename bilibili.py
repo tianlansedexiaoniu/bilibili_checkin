@@ -137,3 +137,42 @@ class BilibiliTask:
             return False, data.get('message', '漫画签到失败')
         except Exception as e:
             return False, str(e)
+
+    # ===================== 以下为「银瓜子兑换硬币」相关 =====================
+    # 说明：B站已于 2026 年下线「直播签到」与「网页端心跳」产银瓜子能力，
+    # 复杂双端看直播心跳（移动端需 Sypder 加密）也不可靠。这里仅保留
+    # 「银瓜子 → 硬币」兑换：当账户银瓜子 ≥700 时自动兑换 1 枚硬币；
+    # 银瓜子不足则安全跳过。若日后 B站恢复银瓜子来源，兑换会自动生效。
+
+    def get_silver_status(self):
+        """查询银瓜子/硬币钱包状态。"""
+        try:
+            r = requests.get('https://api.live.bilibili.com/xlive/revenue/v1/wallet/getStatus',
+                             headers=self.headers, timeout=15).json()
+            if r.get('code') == 0:
+                return r.get('data', {})
+        except Exception as e:
+            logger.error(f"查询银瓜子状态异常: {e}")
+        return None
+
+    def silver2coin(self):
+        """把银瓜子兑换成硬币（700 银瓜子 = 1 硬币）。银瓜子不足/次数用尽时安全跳过。"""
+        st = self.get_silver_status()
+        if not st:
+            return False, '获取银瓜子状态失败'
+        silver = st.get('silver', 0)
+        left = st.get('silver_2_coin_left', 0)
+        if left <= 0:
+            return True, f'今日兑换次数已用尽(剩{left}次)'
+        if silver < 700:
+            return True, f'银瓜子不足({silver}<700)，暂不兑换'
+        try:
+            r = requests.post(
+                'https://api.live.bilibili.com/xlive/revenue/v1/wallet/silver2coin',
+                data={'csrf': self.csrf or '', 'csrf_token': self.csrf or ''},
+                headers=self.headers, timeout=15).json()
+            if r.get('code') == 0:
+                return True, f"兑换成功，获得{r.get('data', {}).get('coin')}枚硬币(余银瓜子{r.get('data', {}).get('silver')})"
+            return False, r.get('message', '兑换失败')
+        except Exception as e:
+            return False, str(e)
