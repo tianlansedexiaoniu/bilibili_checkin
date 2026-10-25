@@ -34,7 +34,7 @@
 | `BILIBILI_COOKIE` | **是** | B站Cookie。多账号用 `###` 分隔。 | 无 |
 | `PUSH_PLUS_TOKEN` | **否** | PushPlus 的 Token，用于推送通知。 | 无 |
 | `TASK_CONFIG` | **否** | 任务执行控制，用逗号分隔。可选值: `live_sign`, `manga_sign`, `share_video`, `add_coin`, `silver_bag`, `silver2coin`, `silver_heartbeat`, `cleanup_likes` | `live_sign,manga_sign,share_video,add_coin,silver_bag,silver2coin,silver_heartbeat,cleanup_likes` |
-| `COIN_ADD_NUM` | **否** | 每日投币数量（拉满到 5 = 经验天花板）。`0`=不投币、纯赚登录币；`1`=硬币净平衡；`5`=经验最大化(升级最快)。 | `5` |
+| `COIN_ADD_NUM` | **否** | 每日投币数量。`0`=不投币、纯赚登录币；`1`=硬币净平衡（投1领1，默认）；`5`=经验最大化(升级最快，但硬币净-4/天)。 | `1` |
 | `COIN_SELECT_LIKE`| **否** | 投币时是否点赞。`1` 为是，`0` 为否。 | `1` |
 | `COIN_VIDEO_SOURCE`| **否** | 投币视频来源。`dynamic` (动态)，`ranking` (排行榜)。 | `dynamic` |
 | `BILIBILI_MOBILE_ACCESS_KEY` | **否** | 手机端 access_key，仅用于启用实验性「移动端心跳银瓜子」。网页 Cookie 无法派生；不配置则任务安全跳过。 | 无 |
@@ -82,7 +82,7 @@
 - 当前默认优先使用动态视频列表的第一个视频，只有获取失败时才用指定的固定BV号。  
 
 3. 关于投币任务：
-- 投币任务会根据你的配置（默认投满 5 枚 = 每日经验天花板，每枚 +10 经验）自动为视频投币;  
+- 投币任务会根据你的配置（默认 1 枚 = 硬币净平衡：每日投币耗 1、登录领回 1；可设 5 拉满经验上限，或设 0 纯赚登录币）自动为视频投币;  
 - 如果你的硬币余额不足，脚本会自动跳过投币任务，打印日志“硬币不足，跳过”; 
 - 如果当天投币已达上限，脚本会自动终止投币，打印日志“今日投币上限已满，终止投币”； 
 - 投币目标视频可以选择“动态”或“排行榜”来源，具体由`COIN_VIDEO_SOURCE`环境变量控制； 
