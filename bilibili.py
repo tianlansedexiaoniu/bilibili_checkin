@@ -1,3 +1,7 @@
+import os
+import random
+import time
+
 import requests
 from loguru import logger
 
@@ -195,6 +199,85 @@ class BilibiliTask:
             return False, r.get('message', '兑换失败')
         except Exception as e:
             return False, str(e)
+
+    def mobile_heartbeat_silver(self):
+        """移动端「心跳」银瓜子（实验性 / 带容错）。
+
+        B站手机端会通过直播心跳累积银瓜子并开启宝箱。该流程需要：
+          1) bili_spyder 可导入（提供 Sypder 签名；其依赖 wasmtime，版本不兼容时 import 即失败）；
+          2) 手机端 access_key（网页 Cookie 无法派生，需单独配置 BILIBILI_MOBILE_ACCESS_KEY）；
+          3) 移动端签名密钥（BILIBILI_MOBILE_SECRET_RULE）。
+
+        三重阻断（库不兼容 / 缺 access_key / 缺密钥或领取环节 404）下，任意一环失败
+        都安全跳过，绝不影响其它每日任务。想真正生效：在兼容 wasmtime 的环境中
+        pip 安装 bili-spyder + 配置上述两个环境变量即可。
+        """
+        # 1) 动态导入签名库（环境不兼容 wasmtime 时 import 即抛错 → 安全跳过）
+        try:
+            from bili_spyder import calc_sign
+        except Exception as e:
+            return True, f"bili_spyder 不可用({type(e).__name__})，移动端心跳银瓜子安全跳过"
+
+        # 2) 手机端 access_key
+        access_key = os.environ.get('BILIBILI_MOBILE_ACCESS_KEY', '')
+        if not access_key:
+            return True, "未配置移动端 access_key，移动端心跳银瓜子安全跳过"
+
+        # 3) 移动端签名密钥
+        secret_rule = self._mobile_secret_rule()
+        if secret_rule is None:
+            return True, "未配置移动端签名密钥(BILIBILI_MOBILE_SECRET_RULE)，移动端心跳银瓜子安全跳过"
+
+        mheaders = dict(self.headers)
+        mheaders.update({
+            'User-Agent': 'Mozilla/5.0 BiliDroid/7.30.0 (bbcallen@gmail.com)',
+            'Referer': 'https://live.bilibili.com/',
+        })
+        try:
+            # 查询当前银瓜子宝箱状态（通常无需签名）
+            status_url = 'https://api.live.bilibili.com/xlive/lottery-interface/v1/lottery/FreeSilverCurrentTask'
+            st = requests.get(status_url, headers=mheaders, params={'access_key': access_key}, timeout=15).json()
+            if st.get('code') != 0:
+                return True, f"查询银瓜子宝箱失败({st.get('message')})，安全跳过"
+
+            # 发送若干次移动端直播心跳（带 Sypder 签名），累积银瓜子
+            heartbeat_url = 'https://api.live.bilibili.com/room/v1/Room/heartbeat'
+            for _ in range(3):
+                ts = int(time.time())
+                params = {
+                    'platform': 'android',
+                    'mobile_app': 'android',
+                    'room_id': 3,
+                    'scale': f'{random.uniform(1, 3):.2f}',
+                    'ts': ts,
+                    'access_key': access_key,
+                }
+                try:
+                    params['sign'] = calc_sign(params, secret_rule)
+                except Exception as e:
+                    return True, f"签名计算失败({type(e).__name__})，移动端心跳安全跳过"
+                r = requests.get(heartbeat_url, headers=mheaders, params=params, timeout=15).json()
+                if r.get('code') != 0:
+                    return True, f"心跳失败({r.get('message')})，安全跳过"
+                time.sleep(1)
+
+            # 尝试开启宝箱领取银瓜子
+            award_url = 'https://api.live.bilibili.com/xlive/lottery-interface/v1/lottery/FreeSilverAward'
+            aw = requests.get(award_url, headers=mheaders, params={'access_key': access_key}, timeout=15).json()
+            if aw.get('code') == 0:
+                return True, f"移动端心跳银瓜子领取成功：{aw.get('data')}"
+            return True, f"宝箱暂不可领({aw.get('message')})，安全跳过"
+        except Exception as e:
+            return True, f"移动端心跳异常({type(e).__name__})，安全跳过"
+
+    def _mobile_secret_rule(self):
+        raw = os.environ.get('BILIBILI_MOBILE_SECRET_RULE', '')
+        if not raw:
+            return None
+        try:
+            return [int(x) for x in raw.split(',') if x.strip()]
+        except Exception:
+            return None
 
     # ===================== 「清理最近点赞列表」 =====================
     # 本次运行中对视频投币(select_like=1)会同时点赞，这些点赞会被记入「最近点赞」。

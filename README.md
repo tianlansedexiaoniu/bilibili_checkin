@@ -15,6 +15,8 @@
 4. **自动化运行**：结合GitHub Actions实现自动化运行，执行日志结果清晰；
 5. **支持通过 PushPlus 推送任务运行结果**，方便及时获取通知；
 6. **手动触发**：(每日奖励只能领取一次，故触发多次即使执行成功结果也不会变化)。
+7. **银瓜子相关**：每日礼包领取、银瓜子兑换硬币（B站当前已不再发放银瓜子，自动安全跳过）；可选实验性「移动端心跳银瓜子」(需额外配置，见环境变量)。
+8. **清理痕迹**：投币时附带的点赞会在任务末尾统一取消，清理「最近点赞」列表（投币记录本身不可撤销/删除）。
 
 
 ## 签到奖励：
@@ -31,10 +33,12 @@
 |---|---|---|---|
 | `BILIBILI_COOKIE` | **是** | B站Cookie。多账号用 `###` 分隔。 | 无 |
 | `PUSH_PLUS_TOKEN` | **否** | PushPlus 的 Token，用于推送通知。 | 无 |
-| `TASK_CONFIG` | **否** | 任务执行控制，用逗号分隔。可选值: `live_sign`, `manga_sign`, `share_video`, `add_coin` | `live_sign,manga_sign,share_video,add_coin` |
+| `TASK_CONFIG` | **否** | 任务执行控制，用逗号分隔。可选值: `live_sign`, `manga_sign`, `share_video`, `add_coin`, `silver_bag`, `silver2coin`, `silver_heartbeat`, `cleanup_likes` | `live_sign,manga_sign,share_video,add_coin,silver_bag,silver2coin,silver_heartbeat,cleanup_likes` |
 | `COIN_ADD_NUM` | **否** | 每日投币数量。 | `1` |
 | `COIN_SELECT_LIKE`| **否** | 投币时是否点赞。`1` 为是，`0` 为否。 | `1` |
 | `COIN_VIDEO_SOURCE`| **否** | 投币视频来源。`dynamic` (动态)，`ranking` (排行榜)。 | `dynamic` |
+| `BILIBILI_MOBILE_ACCESS_KEY` | **否** | 手机端 access_key，仅用于启用实验性「移动端心跳银瓜子」。网页 Cookie 无法派生；不配置则任务安全跳过。 | 无 |
+| `BILIBILI_MOBILE_SECRET_RULE` | **否** | 移动端签名密钥（逗号分隔的整数），配合上一项启用心跳银瓜子；不配置则任务安全跳过。 | 无 |
 
    **多账号Cookie配置示例:**
    cookie账号1###cookie账号2###cookie账号3
@@ -83,6 +87,17 @@
 - 如果当天投币已达上限，脚本会自动终止投币，打印日志“今日投币上限已满，终止投币”； 
 - 投币目标视频可以选择“动态”或“排行榜”来源，具体由`COIN_VIDEO_SOURCE`环境变量控制； 
 - 投币任务失败不会影响其他任务的执行。
+
+5. 关于银瓜子与移动端心跳：
+- B站自 2026 年起大幅废弃银瓜子来源：直播签到已下线、每日礼包返回空、移动端宝箱多数 404；
+- 因此 `silver_bag`(领礼包) 与 `silver2coin`(兑换硬币) 在当前会自动安全跳过，B站恢复发放时无需改代码即可生效；
+- 实验性 `silver_heartbeat`(移动端心跳银瓜子) 需要 `bili-spyder` 签名库 + 手机端 `access_key` + 签名密钥，三者任一缺失都会在日志中打印「安全跳过」而**不影响其它任务**；
+- 该库对 `wasmtime` 版本敏感，在 incompatible 环境下 import 即失败，属已知限制。
+
+6. 关于清理点赞 / 投币记录：
+- 投币时若 `COIN_SELECT_LIKE=1` 会同时点赞，这些点赞会出现在「最近点赞」；任务末尾的 `cleanup_likes` 会统一取消这些点赞，清理痕迹；
+- **「最近投币的视频」列表在网页端与 API 均无删除接口**（实测 `x/space/coin/del` 等全部 404、页面无删除按钮），投币本身不可逆，无法撤销或删除该记录；
+- 故当前仅能清理点赞，无法删除投币记录，这是 B站产品限制，非脚本缺陷。
 
 4. 关于任务执行一致性：
 - 所有账号会严格按照`TASK_CONFIG`配置执行任务，未配置按默认执行； 

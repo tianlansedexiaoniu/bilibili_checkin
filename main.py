@@ -78,7 +78,7 @@ def execute_coin_task(bili, user_info, config):
 def run_all_tasks_for_account(bili, config):
     tasks_to_run = [task.strip() for task in config.get('TASK_CONFIG', '').split(',') if task.strip()]
     if not tasks_to_run:
-        tasks_to_run = ['live_sign', 'manga_sign', 'share_video', 'add_coin', 'silver_bag', 'silver2coin', 'cleanup_likes']
+        tasks_to_run = ['live_sign', 'manga_sign', 'share_video', 'add_coin', 'silver_bag', 'silver2coin', 'silver_heartbeat', 'cleanup_likes']
 
     user_info = bili.get_user_info()
     if not user_info:
@@ -99,6 +99,8 @@ def run_all_tasks_for_account(bili, config):
         tasks_result['银瓜子礼包'] = bili.get_daily_bag()
     if 'silver2coin' in tasks_to_run:
         tasks_result['银瓜子兑换硬币'] = bili.silver2coin()
+    if 'silver_heartbeat' in tasks_to_run:
+        tasks_result['移动端心跳银瓜子'] = bili.mobile_heartbeat_silver()
     if 'manga_sign' in tasks_to_run:
         tasks_result['漫画签到'] = bili.manga_sign()
     if 'add_coin' in tasks_to_run:
@@ -120,7 +122,7 @@ def main():
     config = {
         "BILIBILI_COOKIE": os.environ.get('BILIBILI_COOKIE'),
         "PUSH_PLUS_TOKEN": os.environ.get('PUSH_PLUS_TOKEN'),
-        "TASK_CONFIG": os.environ.get('TASK_CONFIG') or 'live_sign,manga_sign,share_video,add_coin,silver_bag,silver2coin,cleanup_likes',
+        "TASK_CONFIG": os.environ.get('TASK_CONFIG') or 'live_sign,manga_sign,share_video,add_coin,silver_bag,silver2coin,silver_heartbeat,cleanup_likes',
         "COIN_ADD_NUM": os.environ.get('COIN_ADD_NUM') or '1',
         "COIN_SELECT_LIKE": os.environ.get('COIN_SELECT_LIKE') or '1',
         "COIN_VIDEO_SOURCE": os.environ.get('COIN_VIDEO_SOURCE') or 'dynamic'
@@ -203,7 +205,7 @@ def main():
         logger.info("所有账号任务全部成功！")
         sys.exit(0)
 
-IGNORE_FAIL_KEYWORDS = ["未配置", "跳过", "已下线", "不足", "已用尽", "未找到", "无需取消"]
+IGNORE_FAIL_KEYWORDS = ["未配置", "跳过", "已下线", "不足", "已用尽", "未找到", "无需取消", "安全跳过"]
 
 if __name__ == '__main__':
     main()
