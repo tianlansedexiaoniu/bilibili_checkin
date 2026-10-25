@@ -117,13 +117,17 @@ def run_all_tasks_for_account(bili, config):
 def main():
     # ==================== 【核心配置点】 ====================
     # 每日登录奖励 +1 硬币由 B站服务端自动发放（无需领取接口）。
-    # 令 COIN_ADD_NUM=1，使「每日投币消耗(1) ≈ 登录领取(1)」，保持硬币净平衡；
-    # 若日后银瓜子可兑换，将额外获得硬币（净正增长）。
+    # 主站经验天花板 = 登录5 + 观看5 + 分享5 + 投币(10/枚×最多5枚=50) = 65/天。
+    # 令 COIN_ADD_NUM=5：投币拉满到每日免费上限，经验直接吃满天花板。
+    # 代价：登录 +1、投币 -5 → 硬币每天净 -4（纯靠账号存量消耗）。
+    #   · 若想「保持硬币净平衡」→ 设为 1；
+    #   · 若想「纯赚登录硬币、不拿投币经验」→ 设为 0；
+    #   · 当前策略：最大化每日经验（升级最快）。
     config = {
         "BILIBILI_COOKIE": os.environ.get('BILIBILI_COOKIE'),
         "PUSH_PLUS_TOKEN": os.environ.get('PUSH_PLUS_TOKEN'),
         "TASK_CONFIG": os.environ.get('TASK_CONFIG') or 'live_sign,manga_sign,share_video,add_coin,silver_bag,silver2coin,silver_heartbeat,cleanup_likes',
-        "COIN_ADD_NUM": os.environ.get('COIN_ADD_NUM') or '1',
+        "COIN_ADD_NUM": os.environ.get('COIN_ADD_NUM') or '5',
         "COIN_SELECT_LIKE": os.environ.get('COIN_SELECT_LIKE') or '1',
         "COIN_VIDEO_SOURCE": os.environ.get('COIN_VIDEO_SOURCE') or 'dynamic'
     }
