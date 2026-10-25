@@ -135,12 +135,21 @@ class BilibiliTask:
 
     def manga_sign(self):
         url = 'https://manga.bilibili.com/twirp/activity.v1.Activity/ClockIn'
+        # 漫画接口需在 manga 域下请求，加上专属 Referer 更稳妥
+        manga_headers = dict(self.headers)
+        manga_headers['Referer'] = 'https://manga.bilibili.com/'
         try:
-            res = requests.post(url, headers=self.headers, data={'platform': 'ios'})
+            res = requests.post(url, headers=manga_headers, data={'platform': 'ios'}, timeout=15)
             data = res.json()
-            if data['code'] == 0:
+            code = data.get('code')
+            # 真实失败信息在 msg 字段（旧版接口也偶尔用 message），务必读对字段
+            msg = data.get('msg') or data.get('message') or ''
+            if code == 0 or str(code) == '0':
                 return True, "漫画签到成功"
-            return False, data.get('message', '漫画签到失败')
+            # 已签到 / 重复签到 属良性状态，不视为失败
+            if any(k in str(msg) for k in ('repeat', '重复', '已签到', '已经', 'already', '今日')):
+                return True, f"漫画今日已签到（{msg}）"
+            return False, f"漫画签到失败: {msg} (code={code})"
         except Exception as e:
             return False, str(e)
 
